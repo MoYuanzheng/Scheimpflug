@@ -1,4 +1,5 @@
-﻿#include<stdio.h>
+﻿
+#include<stdio.h>
 #include<math.h>
 #include<iostream>
 #include<vector>
@@ -184,29 +185,6 @@ double Calculate_Laser_Lens_Angle() {
     return theta_4;
 }
 
-//! 随机生成的直线 并要求穿光心后得到两个面交点
-_Vec_Point_Pair Random_Generate_Point_Pair(_Point optical_center, _Plane p1, _Plane p2, int number) {
-    //! 随机生成 49 条直线且与 p1 p2 相交的
-    _Vec_Point_Pair PointPair;
-    _Line Line = { 0.0,0.0,0.0 };
-    for (int i = 0; i < number; i++) {
-
-        Line.a = rand() % 100 - 50;
-        Line.b = rand() % 100 - 50;
-        Line.c = rand() % 100 - 50;
-        //!限制直线交点只允许出现在z的负半轴并且与俩平面存在交点
-        if (Line.b / Line.c < 0 && Is_Intersect(p1, p2, Line)) {
-            PointPair.p1.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p1, Line));
-            PointPair.p2.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p2, Line));
-        }
-        else {
-            i--;
-        }
-    }
-    return PointPair;
-}
-
-
 //! 判断 P1 P2 相交
 bool Is_Intersect(_Plane P1, _Plane P2, _Line L) {
     if (P1.A * L.a + P1.B * L.b + P1.C * L.c == 0 || P2.A * L.a + P2.B * L.b + P2.C * L.c == 0) {
@@ -230,6 +208,27 @@ _Point Calculate_Line_Plane_Intersection_Point(_Point optical_center, _Plane P, 
     return point;
 }
 
+//! 随机生成的直线 并要求穿光心后得到两个面交点
+_Vec_Point_Pair Random_Generate_Point_Pair(_Point optical_center, _Plane p1, _Plane p2, int number) {
+    //! 随机生成 49 条直线且与 p1 p2 相交的
+    _Vec_Point_Pair PointPair;
+    _Line Line = { 0.0,0.0,0.0 };
+    for (int i = 0; i < number; i++) {
+
+        Line.a = rand() % 100 - 50;
+        Line.b = rand() % 100 - 50;
+        Line.c = rand() % 100 - 50;
+        //!限制直线交点只允许出现在z的负半轴并且与俩平面存在交点
+        if (Line.b / Line.c < 0 && Is_Intersect(p1, p2, Line)) {
+            PointPair.p1.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p1, Line));
+            PointPair.p2.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p2, Line));
+        }
+        else {
+            i--;
+        }
+    }
+    return PointPair;
+}
 
 //! 将传感器平面转为像坐标系
 std::vector<_Point> Coordinate_System_conversion_to_Image_Center(vector<_Point> points, _Point image_center) {
