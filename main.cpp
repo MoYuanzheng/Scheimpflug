@@ -1,73 +1,4 @@
-﻿#include <fstream>
-#include<stdio.h>
-#include<math.h>
-#include<iostream>
-#include<vector>
-#include<algorithm>
-#include<opencv2/opencv.hpp>
-
-using namespace std;
-
-const float PI = 4 * atan(1);
-
-struct _Plane {
-    float A;
-    float B;
-    float C;
-    float D;
-};
-
-struct _Line
-{
-    float a;
-    float b;
-    float c;
-};
-
-struct _Vec_Point_Pair
-{
-    //! 位于激光平面的坐标vec
-    std::vector<cv::Point3f> p1;
-    //! 位于传感器(图像)平面的坐标vec
-    std::vector<cv::Point3f> p2;
-};
-
-//! theta_1[已知] 激光平面与光轴夹角
-const float theta_1 = 45.0 / 180 * PI;
-
-//! theta_2[已知] 光轴与传感器平面夹角
-const float theta_2 = 60.0 / 180 * PI;
-
-//! theta_3[已知] 激光平面与传感器平面夹角
-const float theta_3 = 75.0 / 180 * PI;
-
-//! theta_4[未知] 激光平面与镜头平面夹角
-float theta_4;
-
-//! theta_9[未知] 坐标系旋转角度
-float theta_9 = PI / 2 - theta_3;
-
-
-//! a[已知] 为激光平面至镜头光心的距离
-//! b[已知] 为镜头光心至传感器的距离
-const float distance_a = -50.0, distance_b = -35.0;
-
-//! p1为激光平面
-const _Plane p1 = { 0,1.0,0,0 };
-
-
-//! p2为成像平面（传感器平面）
-//! 假设p2平面是由方向向量为(0,0,-1) 对应 (i,j,k) 的平面绕x轴逆时针旋转PI/2 - theta_3个弧度得到的平面，那么宣传后的法向量为
-//!														(0,j*cos(theta_3)−k*sin(theta_3),j*sin(theta_3)+k*cos(theta_3))
-const _Plane p2 = { 0,0 * cos(PI / 2 - theta_3) + (-1) * (-sin(PI / 2 - theta_3)),0 * sin(PI / 2 - theta_3) + (-1) * cos(PI / 2 - theta_3),0 };
-const int LINE_NUMBER = 100;
-
-std::vector<cv::Point3f> Calculate_Optical_Image_Center_Point();
-float Calculate_Laser_Lens_Angle();
-_Vec_Point_Pair Random_Generate_Point_Pair(cv::Point3f optical_center, _Plane p1, _Plane p2, int number = LINE_NUMBER);
-std::vector<cv::Point3f> Coordinate_System_conversion_to_Image_Center(vector<cv::Point3f> points, cv::Point3f optical_center);
-std::vector<cv::Point3f> Simulated_Image_Distortion(vector<cv::Point3f> points);
-std::vector<cv::Point2f>Point3f_To_Point2f(std::vector<cv::Point3f>Points);
+﻿#include"head.h"
 
 //! 以激光平面与成像平面与镜头平面的交点作为空间直角坐标系原点
 //! 激光平面垂直与y轴且过原点
@@ -78,111 +9,61 @@ int main() {
     std::vector<cv::Point3f> point_center = Calculate_Optical_Image_Center_Point();
 
     //! 求 光心位置 
-    cv::Point3f optical_center = point_center[0];
+    cv::Point3f Optocal_Center = point_center[0];
     //! 求 像平面原点
     cv::Point3f image_center = point_center[1];
 
     //! 求镜片与激光夹角
     theta_4 = Calculate_Laser_Lens_Angle();
 
+    //! 限制直线方向
+    vector<_Line> Line_Direction_Vector_Range = Limit_p1_Intersection_Point_Range(Optocal_Center, P_1_Size);
+
     //! 求交点
-    _Vec_Point_Pair PointPair = Random_Generate_Point_Pair(optical_center, p1, p2);
-    //! 修正像平面坐标系
+    _Vec_Point_Pair PointPair = Random_Generate_Point_Pair(Optocal_Center, p1, p2, Line_Direction_Vector_Range);
+
+    //! 修正像平面坐标系 以像平面中心建立坐标系
     std::vector<cv::Point3f>Correct_Point = Coordinate_System_conversion_to_Image_Center(PointPair.p2, image_center);
 
-    //! 像平面叠加即便模型
+    //! 图像平面叠加畸变模型
+    //! 
     std::vector<cv::Point3f>Distortion_Point = Simulated_Image_Distortion(Correct_Point);
 
-    //! 由Point3f转为Point2f，放弃z轴数据
-    std::vector<cv::Point2f>Distortion_Points2f = Point3f_To_Point2f(Distortion_Point);
+    //! 转为真实像素坐标，以左上角为原点，向下、向右依次递增
+    std::vector<cv::Point2f>Pixel_Points = Coordinate_System_conversion_to_Pixel(Distortion_Point, Image_Size);
 
-    //for (int i = 0; i < Distortion_Point.size(); i++) {
-    //	cout << Distortion_Point[i].x << " ";
-    //}
-    //cout << endl;
-    //for (int i = 0; i < Distortion_Point.size(); i++) {
-    //	cout << Distortion_Point[i].y << " ";
-    //}
-    //cout << endl;
-
-    //for (int i = 0; i < Distortion_Point.size(); i++) {
-    //	cout << Distortion_Point[i].z << " ";
-    //}
-
-    //for (int i = 0; i < PointPair.p1.size(); i++) {
-    //    cout << PointPair.p1[i].x << " ";
-    //}
-    //cout << endl; cout << endl;
-    //for (int i = 0; i < PointPair.p1.size(); i++) {
-    //    cout << PointPair.p1[i].y << " ";
-    //}cout << endl; cout << endl;
-    //for (int i = 0; i < PointPair.p1.size(); i++) {
-    //    cout << PointPair.p1[i].z << " ";
-    //}
-
-    //cout << endl; cout << endl; cout << endl; cout << endl;
-
-    //for (int i = 0; i < PointPair.p1.size(); i++) {
-    //    cout << PointPair.p2[i].x << " ";
-    //}
-    //cout << endl; cout << endl;
-    //for (int i = 0; i < PointPair.p1.size(); i++) {
-    //    cout << PointPair.p2[i].y << " ";
-    //}cout << endl; cout << endl;
-    //for (int i = 0; i < PointPair.p1.size(); i++) {
-    //    cout << PointPair.p2[i].z << " ";
-    //}
+    //! 由z轴 -> y轴数据
+    std::vector<cv::Point3f>P_1_X_Z_Y = Point3f_Inversion_Z_Y(PointPair.p1);
 
     std::vector < std::vector<cv::Point3f>> obj;
     std::vector < std::vector<cv::Point2f>> img;
 
-    //obj[0].push_back({ 0, 0, 0 });
-    //obj[0].push_back({ 0, 3, 0 });
-    //obj[0].push_back({ 0, 6, 0 });
-    //obj[0].push_back({ 0, 9, 0 });
-    //obj[0].push_back({ 0, 12, 0 });
-
-    //img[0].push_back({ 448.48288, 343.86087 });
-    //img[0].push_back({ 478.1792, 344.48053 });
-    //img[0].push_back({ 507.76147, 345.14603 });
-    //img[0].push_back({ 537.19342, 345.77951 });
-    //img[0].push_back({ 566.50525, 346.4072 });
-    obj.push_back(PointPair.p1);
-    img.push_back(Distortion_Points2f);
+    obj.push_back(P_1_X_Z_Y);
+    img.push_back(Pixel_Points);
     //! ----------------------------------------------------------------------------------------------------------------
-    std::vector<cv::Point3f> object_points_seq;	//存储所有图片的世界坐标
-    float data[] = { 35, 0, 5000,0,0.35,6000,0,0,0 };
-    cv::Mat cameraMatrix(3, 3, CV_32FC1, data);
-    // 从数组初始化
-
+    //float data[] = { 350, 0, 1224,0,420,512,0,0,1 };
+    //cv::Mat cameraMatrix(3, 3, CV_32FC1, data);
+    cv::Mat cameraMatrix;
     cv::Mat distCoeffs;
     std::vector<cv::Mat> rvecsMat;
     std::vector<cv::Mat> tvecsMat;
-    cv::Size image_size;
-    image_size.height = 10000;
-    image_size.width = 12000;
+
+
     ///*运行标定函数*/
     float err_first = 0.0;
-    err_first = cv::calibrateCamera(
-        obj,
-        img,
-        image_size,
-        cameraMatrix,
-        distCoeffs,
-        rvecsMat,
-        tvecsMat,
-        cv::CALIB_TILTED_MODEL);
+    err_first = cv::calibrateCamera(obj, img, Image_Size, cameraMatrix, distCoeffs, rvecsMat, tvecsMat, cv::CALIB_TILTED_MODEL);
+
     ///*输出内参数*/
-    //std::cout << "cameraMatrix:" << std::endl;
-    //std::cout << cameraMatrix << std::endl;
-    //std::cout << "distCoeffs:" << std::endl;
-    //std::cout << distCoeffs << std::endl;
+    std::cout << "cameraMatrix:" << std::endl;
+    std::cout << cameraMatrix << std::endl;
+    std::cout << "distCoeffs:" << std::endl;
+    std::cout << distCoeffs << std::endl;
 
     ///*输出外参数*/
-    //std::cout << "rvecsMat:" << std::endl;
-    //std::cout << rvecsMat[0] << std::endl;
-    //std::cout << "tvecsMat:" << std::endl;
-    //std::cout << tvecsMat[0] << std::endl;
+    std::cout << "rvecsMat:" << std::endl;
+    std::cout << rvecsMat[0] << std::endl;
+    std::cout << "tvecsMat:" << std::endl;
+    std::cout << tvecsMat[0] << std::endl;
     return 0;
 }
 
@@ -197,7 +78,7 @@ std::vector<cv::Point3f> Calculate_Optical_Image_Center_Point() {
     //! e[未知] 为光心距离x-z平面的距离
 
 
-    float distance_e = -(((sin(theta_2) * (fabs(distance_b) + fabs(distance_a) / sin(theta_1))) / sin(theta_3)) - fabs(distance_a) / tan(theta_1));
+    distance_e = -(((sin(theta_2) * (fabs(distance_b) + fabs(distance_a) / sin(theta_1))) / sin(theta_3)) - fabs(distance_a) / tan(theta_1));
     //! 镜头光心坐标
     cv::Point3f Optical_Center = { 0, distance_a, distance_e };
 
@@ -244,6 +125,44 @@ bool Is_Intersect(_Plane P1, _Plane P2, _Line L) {
     return true;
 }
 
+//! 限制直线处在目标范围内
+vector<_Line> Limit_p1_Intersection_Point_Range(cv::Point3f Optocal_Center, cv::Size2f P_1_Size) {
+    cv::Point3f p1_Limit_Left_Top = { P_1_Size.width / 2, 0, -_floor + P_1_Size.height };
+    cv::Point3f p1_Limit_Left_Low = { P_1_Size.width / 2, 0, -_floor };
+    cv::Point3f p1_Limit_Right_Top = { -P_1_Size.width / 2, 0, -_floor + P_1_Size.height };
+    cv::Point3f p1_Limit_Right_Low = { -P_1_Size.width / 2, 0, -_floor };
+    vector<_Line> Line_Direction_Vector_Range;
+    _Line temp = {
+        (Optocal_Center - p1_Limit_Left_Top).x,
+        (Optocal_Center - p1_Limit_Left_Top).y,
+        (Optocal_Center - p1_Limit_Left_Top).z
+    };
+    Line_Direction_Vector_Range.push_back(temp);
+
+    temp = {
+        (Optocal_Center - p1_Limit_Left_Low).x,
+        (Optocal_Center - p1_Limit_Left_Low).y,
+        (Optocal_Center - p1_Limit_Left_Low).z
+    };
+    Line_Direction_Vector_Range.push_back(temp);
+
+    temp = {
+        (Optocal_Center - p1_Limit_Right_Top).x,
+        (Optocal_Center - p1_Limit_Right_Top).y,
+        (Optocal_Center - p1_Limit_Right_Top).z
+    };
+    Line_Direction_Vector_Range.push_back(temp);
+
+    temp = {
+        (Optocal_Center - p1_Limit_Right_Low).x,
+        (Optocal_Center - p1_Limit_Right_Low).y,
+        (Optocal_Center - p1_Limit_Right_Low).z
+    };
+    Line_Direction_Vector_Range.push_back(temp);
+
+    return Line_Direction_Vector_Range;
+}
+
 //! 求线面交点 - 世界坐标
 cv::Point3f Calculate_Line_Plane_Intersection_Point(cv::Point3f optical_center, _Plane P, _Line Line) {
 
@@ -260,17 +179,35 @@ cv::Point3f Calculate_Line_Plane_Intersection_Point(cv::Point3f optical_center, 
 }
 
 //! 随机生成的直线 并要求穿光心后得到两个面交点
-_Vec_Point_Pair Random_Generate_Point_Pair(cv::Point3f optical_center, _Plane p1, _Plane p2, int number) {
+_Vec_Point_Pair Random_Generate_Point_Pair(cv::Point3f optical_center, _Plane p1, _Plane p2, vector<_Line> Line_Direction_Vector_Range, int number) {
     //! 随机生成 49 条直线且与 p1 p2 相交的
     _Vec_Point_Pair PointPair;
     _Line Line = { 0.0,0.0,0.0 };
     for (int i = 0; i < number; i++) {
 
-        Line.a = rand() % 100 - 50;
-        Line.b = rand() % 100 - 50;
-        Line.c = rand() % 100 - 50;
-        //!限制直线交点只允许出现在z的负半轴并且与俩平面存在交点
-        if (Line.b / Line.c < 0 && Is_Intersect(p1, p2, Line)) {
+        int a_max = std::max({ Line_Direction_Vector_Range[0].a,Line_Direction_Vector_Range[1].a,Line_Direction_Vector_Range[2].a,Line_Direction_Vector_Range[3].a });
+        int a_min = std::min({ Line_Direction_Vector_Range[0].a,Line_Direction_Vector_Range[1].a,Line_Direction_Vector_Range[2].a,Line_Direction_Vector_Range[3].a });
+
+        int b_max = std::max({ Line_Direction_Vector_Range[0].b,Line_Direction_Vector_Range[1].b,Line_Direction_Vector_Range[2].b,Line_Direction_Vector_Range[3].b });
+        int b_min = std::min({ Line_Direction_Vector_Range[0].b,Line_Direction_Vector_Range[1].b,Line_Direction_Vector_Range[2].b,Line_Direction_Vector_Range[3].b });
+
+        int c_max = std::max({ Line_Direction_Vector_Range[0].c,Line_Direction_Vector_Range[1].c,Line_Direction_Vector_Range[2].c,Line_Direction_Vector_Range[3].c });
+        int c_min = std::min({ Line_Direction_Vector_Range[0].c,Line_Direction_Vector_Range[1].c,Line_Direction_Vector_Range[2].c,Line_Direction_Vector_Range[3].c });
+
+        //  srand(time(NULL) + i);
+        double a_rand = (double)rand() / RAND_MAX;  // 生成介于 0 和 1 之间的随机数
+        Line.a = a_rand * (a_max - a_min) + (a_min);  // 缩放到 (a_min, a_max) 区间
+
+        //  srand(time(NULL) + int(Line.a) + i);
+        double b_rand = (double)rand() / RAND_MAX;  // 生成介于 0 和 1 之间的随机数
+        Line.b = b_rand * (b_max - b_min) + (b_min);  // 缩放到 (b_min, b_max) 区间
+
+        // srand(time(NULL) + int(Line.b) + i);
+        double c_rand = (double)rand() / RAND_MAX;  // 生成介于 0 和 1 之间的随机数
+        Line.c = c_rand * (c_max - c_min) + (c_min);  // 缩放到 (c_min, c_max) 区间
+
+        //!不允许出现直线与P1或P2平行的情况
+        if (Is_Intersect(p1, p2, Line)) {
             PointPair.p1.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p1, Line));
             PointPair.p2.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p2, Line));
         }
@@ -304,17 +241,18 @@ std::vector<cv::Point3f> Coordinate_System_conversion_to_Image_Center(vector<cv:
     return RT_points;
 }
 
+//! 转pixel
+std::vector<cv::Point2f> Coordinate_System_conversion_to_Pixel(vector<cv::Point3f> Distortion_Point, cv::Size Image_Size) {
+    cout << "Coordinate_System_conversion_to_Pixel" << endl;
+    vector<cv::Point2f> Pixel_Points;
+    for (int i = 0; i < Distortion_Point.size(); i++) {
+        Pixel_Points.push_back({ Image_Size.height / 2 - Distortion_Point[i].y,Image_Size.width / 2 - Distortion_Point[i].x });
+    }
+    return Pixel_Points;
+}
+
 //! 添加成像平面p2径向畸变
 std::vector<cv::Point3f> Simulated_Image_Distortion(vector<cv::Point3f> points) {
-    return points;
-    //! 设置畸变因子
-    float k1 = 0.004408749451738147;
-    float k2 = 0.0003288813627739166;
-    float k3 = 0.00008529518568999;
-    //! 设置内参
-    //! fx = 相机焦距 * 采样比（每毫米对应的像素 仿真模型中设为1）
-    float fx = 35, fy = 35;
-
 
     for (int i = 0; i < points.size(); i++) {
         //! 计算距离
@@ -328,17 +266,18 @@ std::vector<cv::Point3f> Simulated_Image_Distortion(vector<cv::Point3f> points) 
         points[i].y = points[i].y * lambda * fy;
     }
     //! 返回添加完畸变的vector坐标
-
+    return points;
 }
 
-//!三维坐标转二维坐标 
-std::vector<cv::Point2f>Point3f_To_Point2f(std::vector<cv::Point3f>Points) {
-    std::vector<cv::Point2f> Points2f;
-    cv::Point2f Point2f;
+//!三维坐标转二维坐标  p1 Z->Y
+std::vector<cv::Point3f>Point3f_Inversion_Z_Y(std::vector<cv::Point3f> Points) {
+    std::vector<cv::Point3f> Points3f_X_Z_Y;
     for (int i = 0; i < Points.size(); i++) {
-        Point2f.x = Points[i].x;
-        Point2f.y = Points[i].y;
-        Points2f.push_back(Point2f);
+
+        Points3f_X_Z_Y.push_back({ Points[i].x, Points[i].z, 0 });
     }
-    return Points2f;
+    return Points3f_X_Z_Y;
 }
+
+
+//! 添加成像高斯噪声 0均值，低幅值的高斯噪声
