@@ -24,7 +24,6 @@ struct _Line
     float b;
     float c;
 };
-
 //! 点对
 struct _Vec_Point_Pair
 {
@@ -58,24 +57,30 @@ float distance_e;
 //! p1为激光平面
 const _Plane p1 = { 0,1.0,0,0 };
 
-//! 设定放置物体的地面相对于原点有100mm距离
+//! 设定 放置物体的地面相对于原点有100mm距离
 const float _floor = 100.0;
 
 //! 激光平面物体限制 高 50mm 宽 100mm
 //const float p1_Height = 50.0, p1_Width = 100.0;
 const cv::Size2f P_1_Size = { 100.0,50.0 };
 
+vector<cv::Point3f> P1_4_Corner = {
+    {50.0, 0, -50},       //! LU
+    {-50.0, 0, -50},      //! RU
+    {50.0, 0, -100},      //! LD
+    {-50, 0, -100}        //! RD
+};
 
 //! 相机的像素尺寸
-const cv::Size Image_Size = { 2448,1024 };
+const cv::Size Image_Size = { 1920,1080 };
 
 //! p2为成像平面（传感器平面）
-//! 假设p2平面是由方向向量为(0,0,-1) 对应 (i,j,k) 的平面绕x轴逆时针旋转PI/2 - theta_3个弧度得到的平面，那么宣传后的法向量为
+//! 假设p2平面是由方向向量为(0,0,-1) 对应 (i,j,k) 的平面绕x轴逆时针旋转PI/2 - theta_3个弧度得到的平面，即旋转后的法向量为
 //!														(0,j*cos(theta_3)−k*sin(theta_3),j*sin(theta_3)+k*cos(theta_3))
 const _Plane p2 = { 0,0 * cos(PI / 2 - theta_3) + (-1) * (-sin(PI / 2 - theta_3)),0 * sin(PI / 2 - theta_3) + (-1) * cos(PI / 2 - theta_3),0 };
 
 //! 生成直线数量
-const int LINE_NUMBER = 12000;
+const int LINE_NUMBER = 50000;
 
 //! 设置畸变因子
 const float k1 = 0.04408749451738147;
@@ -83,15 +88,22 @@ const float k2 = 0.003288813627739166;
 const float k3 = 0.0008529518568999;
 
 //! 设置内参
-//! fx = 相机焦距 * 采样比（每毫米对应的像素 10代表1mm距离可采集10个pixel）
-const float fx = 35.0 * 10, fy = 35.0 * 12;
+//! x轴与y轴 每毫米对应的采样点
+const float X_Sample_Rate = 11.429;
+const float Y_Sample_Rate = 15.625;
 
+//! fx = 相机焦距 * 采样比（每毫米对应的像素 10 代表 1mm 距离可采集10个pixel）
+//! 焦距 f 为 35mm
+const float fx = 35.0 * X_Sample_Rate / 1000, fy = 35.0 * Y_Sample_Rate / 1000;
+
+//! ===============================================================================================
 //! 函数声明部分
 std::vector<cv::Point3f> Calculate_Optical_Image_Center_Point();
 float Calculate_Laser_Lens_Angle();
 _Vec_Point_Pair Random_Generate_Point_Pair(cv::Point3f optical_center, _Plane p1, _Plane p2, vector<_Line> Line_Direction_Vector_Range, int number = LINE_NUMBER);
-std::vector<cv::Point3f> Coordinate_System_conversion_to_Image_Center(vector<cv::Point3f> points, cv::Point3f optical_center);
-std::vector<cv::Point2f> Coordinate_System_conversion_to_Pixel(vector<cv::Point3f> Distortion_Point, cv::Size Image_Size);
+std::vector<cv::Point3f>  Fix_Generate_Point_Pair(cv::Point3f optical_center, _Plane p2, vector<cv::Point3f> P1_4_Corner);
+std::vector<cv::Point3f> Coordinate_System_conversion_to_Pixel_P1(vector<cv::Point3f> points);
+std::vector<cv::Point2f> Coordinate_System_conversion_to_Pixel_P2(vector<cv::Point3f> points);
 std::vector<cv::Point3f> Simulated_Image_Distortion(vector<cv::Point3f> points);
-std::vector<cv::Point3f>Point3f_Inversion_Z_Y(std::vector<cv::Point3f> Points);
-vector<_Line> Limit_p1_Intersection_Point_Range(cv::Point3f Optocal_Center, cv::Size2f P_1_Size);
+std::vector<cv::Point3f> Point3f_Inversion_Z_Y(std::vector<cv::Point3f> Points);
+std::vector<_Line> Limit_p1_Intersection_Point_Range(cv::Point3f Optocal_Center, cv::Size2f P_1_Size);
