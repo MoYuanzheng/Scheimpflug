@@ -3,30 +3,41 @@
 //! 以激光平面与成像平面与镜头平面的交点作为空间直角坐标系原点
 //! 激光平面垂直与y轴且过原点
 int main() {
+
     //! 求 光心位置 和 像平面原点
-    std::vector<cv::Point3f> point_center = Calculate_Optical_Image_Center_Point();
+    std::vector<cv::Point3f> point_center = Calculate_Optical_Sensor_Center_Point_2();
 
-    //! 求 光心位置 
+    //! 提取 光心位置 
     cv::Point3f Optocal_Center = point_center[0];
-    //! 求 像平面原点
-    cv::Point3f image_center = point_center[1];
+    //! 提取 传感器中心
+    cv::Point3f Sensor_Center = point_center[1];
 
-    //! 求镜片与激光夹角
-    theta_4 = Calculate_Laser_Lens_Angle();
+    //! 求传感器与激光夹角
+    theta_3 = Calculate_Laser_Sensor_Angle();
+    theta_9 = PI / 2 - theta_3;
+    //! 计算传感器平面方程
+    _Plane P2 = { 0,0 * cos(theta_9) + (-1) * (-sin(theta_9)),0 * sin(theta_9) + (-1) * cos(theta_9),0 };
+    //! 计算P2角点
+    Calculate_P2_Corner(Sensor_Center, Sensor_Size, theta_9);
 
     //! 限制直线方向
-    vector<_Line> Line_Direction_Vector_Range = Limit_p1_Intersection_Point_Range(Optocal_Center, P_1_Size);
+    vector<_Line> Line_Direction_Vector_Range = Limit_P2_Intersection_Point_Range(Optocal_Center, Sensor_Center, Sensor_Size);
 
     //! 求随机线面交点
-    _Vec_Point_Pair PointPair = Random_Generate_Point_Pair(Optocal_Center, p1, p2, Line_Direction_Vector_Range);
+    _Vec_Point_Pair PointPair = Random_Generate_Point_Pair(Optocal_Center, p1, P2, Line_Direction_Vector_Range);
 
-    //! 求固定四个角线 面的交点
-    std::vector<cv::Point3f> PointPair_Fix_Corner = Fix_Generate_Point_Pair(Optocal_Center, p2, P1_4_Corner);
+    std::vector<cv::Point3f> P1_Cornor_Points = Calculate_Special_Points(Optocal_Center, p1, P2_4_Corner);
 
-    //! 将固定点对追加到随机点对中
-    PointPair.p1.insert(std::end(PointPair.p1), std::begin(P1_4_Corner), std::end(P1_4_Corner));
-    PointPair.p2.insert(std::end(PointPair.p2), std::begin(PointPair_Fix_Corner), std::end(PointPair_Fix_Corner));
+    std::vector<cv::Point3f> Sensor_Center_Vec = { Sensor_Center };
+    std::vector<cv::Point3f> P1_Center_Points_Vec = Calculate_Special_Points(Optocal_Center, p1, Sensor_Center_Vec);
 
+
+    //! 将固定点对追加到随机点对中 1-4角点 5中心
+    PointPair.p1.insert(std::end(PointPair.p1), std::begin(P1_Cornor_Points), std::end(P1_Cornor_Points));
+    PointPair.p1.push_back(P1_Center_Points_Vec[0]);
+
+    PointPair.p2.insert(std::end(PointPair.p2), std::begin(P2_4_Corner), std::end(P2_4_Corner));
+    PointPair.p2.push_back(Sensor_Center);
 
     //! 改变像平面坐标系 以像平面角点为原点 建立像素坐标
     std::vector<cv::Point2f>Image_Pixel_Points = Coordinate_System_conversion_to_Pixel_P2(PointPair.p2);
@@ -34,9 +45,60 @@ int main() {
     //! 图像平面叠加畸变模型
     //std::vector<cv::Point3f>Distortion_Point = Simulated_Image_Distortion(Image_Pixel_Points);
 
-    //! 激光平面模拟真实标定板提取角点
-    std::vector<cv::Point3f>P1_Pixel_Points = Coordinate_System_conversion_to_Pixel_P1(PointPair.p1);
+    //! 计算最大视场范围
+    cv::Size2f FOV = Calculate_FOV_Max(P1_Cornor_Points);
 
+    cv::Point3f P1_Origin = Calculate_Origin(P1_Cornor_Points, FOV);
+
+    //! 激光平面（物平面）像素化 
+    std::vector<cv::Point3f>P1_Pixel_Points = Coordinate_System_conversion_to_Pixel_P1(PointPair.p1, P1_Origin);
+
+    /* cout << "p1点 x" << endl;
+     for (int i = 0; i < PointPair.p1.size(); i++) {
+         cout << PointPair.p1[i].x << ' ';
+     }
+
+     cout << "p1点 y" << endl;
+     for (int i = 0; i < PointPair.p1.size(); i++) {
+         cout << PointPair.p1[i].y << ' ';
+     }
+
+     cout << "p1点 z" << endl;
+     for (int i = 0; i < PointPair.p1.size(); i++) {
+         cout << PointPair.p1[i].z << ' ';
+     }
+
+
+     cout << "p2点 x" << endl;
+     for (int i = 0; i < PointPair.p2.size(); i++) {
+         cout << PointPair.p2[i].x << ' ';
+     }
+
+     cout << "p2点 y" << endl;
+     for (int i = 0; i < PointPair.p2.size(); i++) {
+         cout << PointPair.p2[i].y << ' ';
+     }
+
+     cout << "p2点 z" << endl;
+     for (int i = 0; i < PointPair.p1.size(); i++) {
+         cout << PointPair.p2[i].z << ' ';
+     }
+
+     cout << endl << "平移像素 x" << endl;
+     for (int i = 0; i < PointPair.p1.size(); i++) {
+         cout << Image_Pixel_Points[i].x << ' ';
+     }
+
+     cout << endl << "平移像素 y" << endl;
+
+     for (int i = 0; i < Image_Pixel_Points.size(); i++) {
+         cout << Image_Pixel_Points[i].y << ' ';
+     }*/
+
+
+
+
+     // !**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--**--
     std::vector < std::vector<cv::Point3f>> obj;
     std::vector < std::vector<cv::Point2f>> img;
 
@@ -53,7 +115,7 @@ int main() {
 
     ///*运行标定函数*/
     float err_first = 0.0;
-    err_first = cv::calibrateCamera(obj, img, Image_Size, cameraMatrix, distCoeffs, rvecsMat, tvecsMat, 0);
+    err_first = cv::calibrateCamera(obj, img, Image_Size, cameraMatrix, distCoeffs, rvecsMat, tvecsMat, cv::CALIB_RATIONAL_MODEL);
 
     ///*输出内参数*/
     std::cout << "cameraMatrix:" << std::endl;
@@ -70,38 +132,58 @@ int main() {
 }
 
 
-//! 计算光心位置 和 像原点
+//! 第一种计算光心位置 和 像原点
 //! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-Ylfmd5KirojBOrxxvlJchDQqnHc
-std::vector<cv::Point3f> Calculate_Optical_Image_Center_Point() {
+//std::vector<cv::Point3f> Calculate_Optical_Sensor_Center_Point_1() {
+//
+//    //! P[0]为光心 P[1]为像原点
+//    std::vector<cv::Point3f> P;
+//
+//    //! 光心的坐标为（0, a, e）
+//    //! e[未知] 为光心距离x-z平面的距离
+//
+//
+//    distance_e = -(((sin(theta_2) * (fabs(distance_b) + fabs(distance_a) / sin(theta_1))) / sin(theta_3)) - fabs(distance_a) / tan(theta_1));
+//    //! 镜头光心坐标
+//    cv::Point3f Optical_Center = { 0.0, static_cast<float>(distance_a), static_cast<float>(distance_e) };
+//
+//    P.push_back(Optical_Center);
+//
+//    float theta_8 = (180 - (360 - 90 - theta_3 / PI * 180 - theta_2 / PI * 180)) / 180 * PI;
+//
+//    cv::Point3f Sensor_Center = { 0.0, static_cast<float>(-(fabs(distance_a) + fabs(distance_b) * cos(theta_8))) ,static_cast<float>(-(fabs(distance_e) - fabs(distance_b) * sin(theta_8))) };
+//
+//    P.push_back(Sensor_Center);
+//
+//    return P;
+//}
+
+//! 求取光心及传感器中心坐标
+std::vector<cv::Point3f> Calculate_Optical_Sensor_Center_Point_2() {
 
     //! P[0]为光心 P[1]为像原点
     std::vector<cv::Point3f> P;
 
-    //! 光心的坐标为（0, a, e）
-    //! e[未知] 为光心距离x-z平面的距离
-
-
-    distance_e = -(((sin(theta_2) * (fabs(distance_b) + fabs(distance_a) / sin(theta_1))) / sin(theta_3)) - fabs(distance_a) / tan(theta_1));
+    //! 光心的坐标为（0, -a, -e）
+    //! 传感器中心为(0,-(a+f),-(e-k) )
     //! 镜头光心坐标
-    cv::Point3f Optical_Center = { 0, distance_a, distance_e };
+    cv::Point3f Optical_Center = { 0.0, -static_cast<float>(distance_a), -static_cast<float>(distance_e) };
 
     P.push_back(Optical_Center);
 
-    float theta_8 = (180 - (360 - 90 - theta_3 / PI * 180 - theta_2 / PI * 180)) / 180 * PI;
+    cv::Point3f Sensor_Center = { 0.0, -static_cast<float>((distance_a + distance_f)) ,-static_cast<float>(distance_h) };
 
-    cv::Point3f Image_Center = { 0.0, -(fabs(distance_a) + fabs(distance_b) * cos(theta_8)) ,-(fabs(distance_e) - fabs(distance_b) * sin(theta_8)) };
-
-    P.push_back(Image_Center);
+    P.push_back(Sensor_Center);
 
     return P;
 }
 
-//! 计算镜头平面与激光平面夹角
+//! 计算镜头平面与激光平面夹角（第一版 ）
 //! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-Ylfmd5KirojBOrxxvlJchDQqnHc
-float Calculate_Laser_Lens_Angle() {
+double Calculate_Laser_Lens_Angle_1() {
     //float theta_4 = atan(1 / (((fabs(distance_b) * sin(theta_2)) / (fabs(distance_a) * sin(theta_3))) + (sin(theta_2) / (sin(theta_1) * sin(theta_3))) - (1 / tan(theta_1))));
     //float theta_4 = atan(fabs(distance_a) * tan(theta_1) * sin(theta_3)) / ((tan(theta_1) * sin(theta_2) * (fabs(distance_b) + fabs(distance_a) / sin(theta_1))) - (fabs(distance_a) * sin(theta_3)));
-    float theta_4 = atan(fabs(distance_a) / (((sin(theta_2) * (fabs(distance_b) + fabs(distance_a) / sin(theta_1))) / sin(theta_3)) - fabs(distance_a) / tan(theta_1)));
+    double theta_4 = atan(fabs(distance_a) / (((sin(theta_2) * (fabs(distance_b) + fabs(distance_a) / sin(theta_1))) / sin(theta_3)) - fabs(distance_a) / tan(theta_1)));
     /*float theta_4 = atan(
         (fabs(distance_a))
         / (
@@ -121,6 +203,13 @@ float Calculate_Laser_Lens_Angle() {
     return theta_4;
 }
 
+//! 计算传感器与激光平面夹角 theta_9（第二版 ）
+double Calculate_Laser_Sensor_Angle() {
+
+    return PI / 2 - acos((distance_a + distance_b * cos(theta_1)) / sqrt(pow((distance_a - distance_b / (sqrt(2))), 2) + pow((distance_a + distance_b / (sqrt(2))), 2)));
+
+}
+
 //! 判断 P1 P2 相交
 bool Is_Intersect(_Plane P1, _Plane P2, _Line L) {
     if (P1.A * L.a + P1.B * L.b + P1.C * L.c == 0 || P2.A * L.a + P2.B * L.b + P2.C * L.c == 0) {
@@ -129,13 +218,13 @@ bool Is_Intersect(_Plane P1, _Plane P2, _Line L) {
     return true;
 }
 
-//! 限制直线处在目标范围内
+//! 限制直线处在目标范围内(由P1出发)
 //! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-OoJ1dbLuGokeihxfuZocJHaQnUd
 vector<_Line> Limit_p1_Intersection_Point_Range(cv::Point3f Optocal_Center, cv::Size2f P_1_Size) {
-    cv::Point3f p1_Limit_Left_Top = { P_1_Size.width / 2, 0, -_floor + P_1_Size.height };
-    cv::Point3f p1_Limit_Left_Low = { P_1_Size.width / 2, 0, -_floor };
-    cv::Point3f p1_Limit_Right_Top = { -P_1_Size.width / 2, 0, -_floor + P_1_Size.height };
-    cv::Point3f p1_Limit_Right_Low = { -P_1_Size.width / 2, 0, -_floor };
+    cv::Point3f p1_Limit_Left_Top = { static_cast<float>(P_1_Size.width / 2), 0.0, static_cast<float>(-_floor + P_1_Size.height) };
+    cv::Point3f p1_Limit_Left_Low = { static_cast<float>(P_1_Size.width / 2),0,static_cast<float>(-_floor) };
+    cv::Point3f p1_Limit_Right_Top = { static_cast<float>(-P_1_Size.width / 2),0,static_cast<float>(-_floor + P_1_Size.height) };
+    cv::Point3f p1_Limit_Right_Low = { static_cast<float>(-P_1_Size.width / 2),0,static_cast<float>(-_floor) };
     vector<_Line> Line_Direction_Vector_Range;
     _Line temp = {
         (Optocal_Center - p1_Limit_Left_Top).x,
@@ -162,6 +251,66 @@ vector<_Line> Limit_p1_Intersection_Point_Range(cv::Point3f Optocal_Center, cv::
         (Optocal_Center - p1_Limit_Right_Low).x,
         (Optocal_Center - p1_Limit_Right_Low).y,
         (Optocal_Center - p1_Limit_Right_Low).z
+    };
+    Line_Direction_Vector_Range.push_back(temp);
+
+    return Line_Direction_Vector_Range;
+}
+
+//! 限制：线方向向量（靶面出发）并计算P2角点
+//! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-GrOsdz1Roob9NsxSLspcJdgTnyb
+std::vector<_Line> Limit_P2_Intersection_Point_Range(cv::Point3f Optocal_Center, cv::Point3f Sensor_Center, cv::Size2f Sensor_Size) {
+
+    P2_LU = { -Sensor_Size.height / 2,
+        Sensor_Center.y + static_cast<float>(Sensor_Size.width / 2 * cos(theta_9)),
+        Sensor_Center.z + static_cast<float>(Sensor_Size.width / 2 * sin(theta_9))
+    };
+
+    P2_RU = { +Sensor_Size.height / 2,
+       Sensor_Center.y + static_cast<float>(Sensor_Size.width / 2 * cos(theta_9)),
+       Sensor_Center.z + static_cast<float>(Sensor_Size.width / 2 * sin(theta_9))
+    };
+
+    P2_LD = { -Sensor_Size.height / 2,
+       Sensor_Center.y - static_cast<float>(Sensor_Size.width / 2 * cos(theta_9)),
+       Sensor_Center.z - static_cast<float>(Sensor_Size.width / 2 * sin(theta_9))
+    };
+    P2_RD = { +Sensor_Size.height / 2,
+        Sensor_Center.y - static_cast<float>(Sensor_Size.width / 2 * cos(theta_9)),
+        Sensor_Center.z - static_cast<float>(Sensor_Size.width / 2 * sin(theta_9))
+    };
+    P2_4_Corner.push_back(P2_LU);
+    P2_4_Corner.push_back(P2_RU);
+    P2_4_Corner.push_back(P2_LD);
+    P2_4_Corner.push_back(P2_RD);
+
+    //! 得直线方程
+    vector<_Line> Line_Direction_Vector_Range;
+    _Line temp = {
+        (Optocal_Center - P2_LU).x,
+        (Optocal_Center - P2_LU).y,
+        (Optocal_Center - P2_LU).z
+    };
+    Line_Direction_Vector_Range.push_back(temp);
+
+    temp = {
+        (Optocal_Center - P2_RU).x,
+        (Optocal_Center - P2_RU).y,
+        (Optocal_Center - P2_RU).z
+    };
+    Line_Direction_Vector_Range.push_back(temp);
+
+    temp = {
+        (Optocal_Center - P2_LD).x,
+        (Optocal_Center - P2_LD).y,
+        (Optocal_Center - P2_LD).z
+    };
+    Line_Direction_Vector_Range.push_back(temp);
+
+    temp = {
+        (Optocal_Center - P2_RD).x,
+        (Optocal_Center - P2_RD).y,
+        (Optocal_Center - P2_RD).z
     };
     Line_Direction_Vector_Range.push_back(temp);
 
@@ -226,26 +375,41 @@ _Vec_Point_Pair Random_Generate_Point_Pair(cv::Point3f optical_center, _Plane p1
     return PointPair;
 }
 
-//! 找到像平面角点 并生成对应点对
+//! 两平面特殊点匹配
 //! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-EC6udrjTPoNfAMxyf4CctmKcnfg
-std::vector<cv::Point3f>  Fix_Generate_Point_Pair(cv::Point3f optical_center, _Plane p2, vector<cv::Point3f> P1_4_Corner) {
-    std::vector<cv::Point3f> Fix_Point_Pair;
+std::vector<cv::Point3f> Calculate_Special_Points(cv::Point3f optical_center, _Plane plane, vector<cv::Point3f> Special_Points) {
+    std::vector<cv::Point3f> Another_Points;
+    //std::vector<_Line> Line_Special;
 
-    _Line Line_LU = { P1_4_Corner[0].x - optical_center.x,P1_4_Corner[0].y - optical_center.y,P1_4_Corner[0].z - optical_center.z };
-    _Line Line_RU = { P1_4_Corner[1].x - optical_center.x,P1_4_Corner[1].y - optical_center.y,P1_4_Corner[1].z - optical_center.z };
-    _Line Line_LD = { P1_4_Corner[2].x - optical_center.x,P1_4_Corner[2].y - optical_center.y,P1_4_Corner[2].z - optical_center.z };
-    _Line Line_RD = { P1_4_Corner[3].x - optical_center.x,P1_4_Corner[3].y - optical_center.y,P1_4_Corner[3].z - optical_center.z };
+    for (int i = 0; i < Special_Points.size(); i++) {
 
-    Fix_Point_Pair.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p2, Line_LU));
-    Fix_Point_Pair.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p2, Line_RU));
-    Fix_Point_Pair.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p2, Line_LD));
-    Fix_Point_Pair.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, p2, Line_RD));
+        //Line_Special.push_back({ Special_Points[i].x - optical_center.x,Special_Points[i].y - optical_center.y,Special_Points[i].z - optical_center.z });
+        //Another_Points.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, plane, Line_Special[i]));
+        Another_Points.push_back(
+            Calculate_Line_Plane_Intersection_Point(
+                optical_center, plane, {
+                    Special_Points[i].x - optical_center.x,
+                    Special_Points[i].y - optical_center.y,
+                    Special_Points[i].z - optical_center.z
+                }
+        ));
+    }
 
-    return Fix_Point_Pair;
+    //_Line Line_LU = { Special_Points[0].x - optical_center.x,Special_Points[0].y - optical_center.y,Special_Points[0].z - optical_center.z };
+    //_Line Line_RU = { Special_Points[1].x - optical_center.x,Special_Points[1].y - optical_center.y,Special_Points[1].z - optical_center.z };
+    //_Line Line_LD = { Special_Points[2].x - optical_center.x,Special_Points[2].y - optical_center.y,Special_Points[2].z - optical_center.z };
+    //_Line Line_RD = { Special_Points[3].x - optical_center.x,Special_Points[3].y - optical_center.y,Special_Points[3].z - optical_center.z };
+
+    //Another_Points.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, plane, Line_LU));
+    //Another_Points.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, plane, Line_RU));
+    //Another_Points.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, plane, Line_LD));
+    //Another_Points.push_back(Calculate_Line_Plane_Intersection_Point(optical_center, plane, Line_RD));
+
+    return Another_Points;
 }
 
 //! 将传感器平面转为以角点建立坐标系（旋转、平移及像素化）
-//! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-OoJ1dbLuGokeihxfuZocJHaQnUd
+//! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-FUkNdlZeHo9cJ4xjycZcgmepn4c
 std::vector<cv::Point2f> Coordinate_System_conversion_to_Pixel_P2(vector<cv::Point3f> points) {
 
     //! 像平面坐标由世界坐标系转为传感器（像平面）坐标系，以橡心为原点
@@ -254,9 +418,13 @@ std::vector<cv::Point2f> Coordinate_System_conversion_to_Pixel_P2(vector<cv::Poi
 
         points_R.push_back({ points[i].x,0,0 });
 
-        //! 旋转 交点逆时针旋转 theta_9 个弧度
+        //! 旋转 交点逆时针旋转 PI/2 - theta_9 个弧度
         points_R[i].y = points[i].y * cos(theta_9) + points[i].z * sin(theta_9);
         points_R[i].z = -points[i].y * sin(theta_9) + points[i].z * cos(theta_9);
+
+        //! 旋转 沿X轴 顺时针旋转 theta_9 个弧度
+        //points_R[i].y = points[i].y * cos(theta_9) - points[i].z * sin(theta_9);
+        //points_R[i].z = points[i].y * sin(theta_9) + points[i].z * cos(theta_9);
     }
 
     //! 平移至角点 建立像素坐标系
@@ -265,22 +433,37 @@ std::vector<cv::Point2f> Coordinate_System_conversion_to_Pixel_P2(vector<cv::Poi
 
         points_RT.push_back({
             (points_R[i].y - points_R[LINE_NUMBER + 1].y),
-            -(points_R[i].x - points_R[LINE_NUMBER + 1].x),
-            points_R[i].z });
+           -(points_R[i].x - points_R[LINE_NUMBER + 1].x),
+            points_R[i].z }
+        );
     }
 
     //! 转像素  按照采样比进行像素转换
     vector<cv::Point2f> Image_Pixel_Points;
     for (int i = 0; i < points_RT.size(); i++) {
         Image_Pixel_Points.push_back({
-            points_RT[i].x * Y_Sample_Rate ,
-            points_RT[i].y * X_Sample_Rate
-            });
+            points_RT[i].x * static_cast<float>(Cols_Sample_Rate) ,
+            points_RT[i].y * static_cast<float>(Rows_Sample_Rate)
+            }
+        );
     }
+
+
+    //cout << "像素点 x" << endl;
+    //for (int i = 0; i < points_R.size(); i++) {
+    //    cout << points_R[i].x << ' ';
+    //}
+
+    //cout << "像素点 y" << endl;
+    //for (int i = 0; i < points_R.size(); i++) {
+    //    cout << points_R[i].y << ' ';
+    //}
+
     return Image_Pixel_Points;
 }
 
 //! 添加成像平面p2径向畸变
+//! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-RrKrdnq6foTnvoxoDsIcK1Fan7g
 std::vector<cv::Point3f> Simulated_Image_Distortion(vector<cv::Point3f> points) {
 
     for (int i = 0; i < points.size(); i++) {
@@ -299,21 +482,90 @@ std::vector<cv::Point3f> Simulated_Image_Distortion(vector<cv::Point3f> points) 
 }
 
 //! P1平面像素化
-std::vector<cv::Point3f> Coordinate_System_conversion_to_Pixel_P1(std::vector<cv::Point3f> Points) {
+//! https://p3cw4jny8c.feishu.cn/docx/DlCGdkHJ3oIHvNxt5YsczCGVnIb#part-N2qFdnRkLoTfQWxWVn2c6bSNnQd
+std::vector<cv::Point3f> Coordinate_System_conversion_to_Pixel_P1(std::vector<cv::Point3f> Points, cv::Point3f Origin) {
     std::vector<cv::Point3f> P1_Pixel_Points;
 
     for (int i = 0; i < Points.size(); i++) {
 
         //! 平移
-        Points[i].x = Points[i].x - P1_4_Corner[0].x;
-        Points[i].y = Points[i].y - P1_4_Corner[0].y;
-        Points[i].z = Points[i].z - P1_4_Corner[0].z;
+        Points[i].x = Points[i].x - Origin.x;
+        Points[i].y = Points[i].y - Origin.y;
+        Points[i].z = Points[i].z - Origin.z;
 
+        //! 交换并压栈
         P1_Pixel_Points.push_back({ -Points[i].z, -Points[i].x,  0 });
+        //P1_Pixel_Points.push_back({ Points[i].x,   0 ,Points[i].z });
     }
+
+    //cout << endl << "p1平移像素 x" << endl;
+    //for (int i = 0; i < P1_Pixel_Points.size(); i++) {
+    //    cout << P1_Pixel_Points[i].x << ' ';
+    //}
+
+    //cout << endl << "p1平移像素 y" << endl;
+
+    //for (int i = 0; i < P1_Pixel_Points.size(); i++) {
+    //    cout << P1_Pixel_Points[i].y << ' ';
+    //}
 
     return P1_Pixel_Points;
 }
 
+//! 计算FOV
+cv::Size2f Calculate_FOV_Max(std::vector<cv::Point3f> Cornor_Points) {
+    //! 靶面的 LD->index=2 对应激光平面 RU->index=1
+    double width = Cornor_Points[0].x - Cornor_Points[1].x;//LU.X0-RU.X1
+    double height = Cornor_Points[2].z - Cornor_Points[1].z;//ld.y-ru.y
 
-//! 添加成像高斯噪声 0均值，低幅值的高斯噪声
+    return cv::Size2f(width, height);
+
+}
+
+//! 计算像素原点
+cv::Point3f Calculate_Origin(std::vector<cv::Point3f> P1_Cornor_Points, cv::Size2f FOV) {
+    //! 取最大的 Z 最大的 X.
+    float X = P1_Cornor_Points[0].x;
+    float Z = P1_Cornor_Points[0].z;
+
+    for (int i = 1; i < P1_Cornor_Points.size(); i++) {
+        if (P1_Cornor_Points[i].x > X) {
+            X = P1_Cornor_Points[i].x;
+        }
+
+        if (P1_Cornor_Points[i].z > Z) {
+            Z = P1_Cornor_Points[i].z;
+        }
+    }
+
+    return { X,0,Z };
+}
+
+//! 计算P2角点
+void Calculate_P2_Corner(cv::Point3f Sensor_Center, cv::Size2f Sensor_Size, double theta_9) {
+
+    P2_LU = { -Sensor_Size.height / 2,
+        Sensor_Center.y + static_cast<float>(Sensor_Size.width / 2 * cos(theta_9)),
+        Sensor_Center.z + static_cast<float>(Sensor_Size.width / 2 * sin(theta_9))
+    };
+
+    P2_RU = { +Sensor_Size.height / 2,
+       Sensor_Center.y + static_cast<float>(Sensor_Size.width / 2 * cos(theta_9)),
+       Sensor_Center.z + static_cast<float>(Sensor_Size.width / 2 * sin(theta_9))
+    };
+
+    P2_LD = { -Sensor_Size.height / 2,
+       Sensor_Center.y - static_cast<float>(Sensor_Size.width / 2 * cos(theta_9)),
+       Sensor_Center.z - static_cast<float>(Sensor_Size.width / 2 * sin(theta_9))
+    };
+    P2_RD = { +Sensor_Size.height / 2,
+        Sensor_Center.y - static_cast<float>(Sensor_Size.width / 2 * cos(theta_9)),
+        Sensor_Center.z - static_cast<float>(Sensor_Size.width / 2 * sin(theta_9))
+    };
+
+    P2_4_Corner.push_back(P2_LU);
+    P2_4_Corner.push_back(P2_RU);
+    P2_4_Corner.push_back(P2_LD);
+    P2_4_Corner.push_back(P2_RD);
+
+}
